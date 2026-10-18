@@ -81,8 +81,13 @@ class Telemetry(C.Structure):
         ("trailerLiftAxle", C.c_bool), ("trailerLiftAxleIndicator", C.c_bool),
         ("jobDeliveredAutoparkUsed", C.c_bool), ("jobDeliveredAutoloadUsed", C.c_bool),
         ("_buffer_b", C.c_char * 25),
-        # zones 6-8 @1640 (fvector, fplacement, dplacement) - not used
-        ("_z6_8", C.c_char * (2300 - 1640)),
+        # zones 6-7 @1640 (fvector, fplacement) - not used
+        ("_z6_7", C.c_char * (2200 - 1640)),
+        # zone 8 @2200 - truck world placement. heading is 0..1, counter-clockwise
+        # from north (0.25 = west), so compass bearing = (1 - heading) * 360
+        ("coordinateX", C.c_double), ("coordinateY", C.c_double), ("coordinateZ", C.c_double),
+        ("heading", C.c_double), ("pitch", C.c_double), ("roll", C.c_double),
+        ("_buffer_dp", C.c_char * 52),
         # zone 9 @2300 - strings
         ("truckBrandId", C.c_char * S), ("truckBrand", C.c_char * S), ("truckId", C.c_char * S),
         ("truckName", C.c_char * S), ("cargoId", C.c_char * S), ("cargo", C.c_char * S),
@@ -106,7 +111,7 @@ class Telemetry(C.Structure):
 
 # The header marks where every zone starts; if any of these fail, the struct above is wrong.
 _ZONES = {"plugin_revision": 40, "restStop": 500, "scale": 700, "speed": 948,
-          "_cfg_wheels_b": 1500, "parkBrake": 1566, "_z6_8": 1640, "truckBrandId": 2300,
+          "_cfg_wheels_b": 1500, "parkBrake": 1566, "_z6_7": 1640, "coordinateX": 2200, "truckBrandId": 2300,
           "jobIncome": 4000, "_z11": 4200, "onJob": 4300}
 for _name, _off in _ZONES.items():
     assert getattr(Telemetry, _name).offset == _off, (_name, getattr(Telemetry, _name).offset, _off)

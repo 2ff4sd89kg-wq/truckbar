@@ -61,6 +61,7 @@ SECTIONS = [
     ("speed", "Speed, RPM, gear, cruise", 330),
     ("lamps", "Status lights + retarder steps", 280),
     ("warnings", "Warning lights", 156),
+    ("compass", "Compass tape", 236),
     ("fuel", "Fuel, DEF, air pressure, MPG, trip fuel", 256),
     ("gauges", "Gauges: oil, water, battery, brakes", 344),
     ("job", "Job: destination, distance, time", 280),
@@ -256,6 +257,7 @@ class Demo:
         t.batteryVoltage, t.brakeTemperature = 13.8, 140 + 60 * math.sin(k / 5)
         t.electricEnabled = t.engineEnabled = True
         t.onJob = True
+        t.heading = (1.0 - (47 + 25 * math.sin(k / 4)) / 360.0) % 1.0   # swings around NE
         t.cityDst, t.compDst, t.cargo = b"St. Louis", b"Central Civil Works", b"Utility Poles"
         if self.ets2:
             t.engineRpmMax, t.gears, t.gearDashboard, t.batteryVoltage = 2500, 12, 9, 27.6
@@ -648,6 +650,40 @@ class Bar:
                 ("BATT", RED, t.batteryVoltageWarning)]
         for i, (lab, col, on) in enumerate(warn):
             self.badge(10 + (i % 3) * 46, 16 + (i // 3) * 28, lab, col if (on and live) else None, 42)
+
+    def s_compass(self, t, c):
+        """A scrolling tape: the bearing you're facing sits under the centre mark."""
+        cv, k = self.cv, self.k
+        bearing = (1.0 - t.heading) * 360.0 % 360.0
+        x0, x1, mid = 10, 226, 118           # tape area within the section
+        span = 120                           # degrees visible across the tape
+        px_per_deg = (x1 - x0) / span
+        y_top, y_base = 16, 58
+        cv.create_rectangle(k(x0), k(y_top), k(x1), k(y_base), fill=BG, outline=OFF)
+        cardinal = {0: "N", 45: "NE", 90: "E", 135: "SE", 180: "S", 225: "SW", 270: "W", 315: "NW"}
+        first = int(math.floor((bearing - span / 2) / 5.0)) * 5
+        for d in range(first, first + span + 10, 5):
+            x = mid + (d - bearing) * px_per_deg
+            if x < x0 + 2 or x > x1 - 2:
+                continue
+            deg = d % 360
+            if deg in cardinal:
+                main = deg % 90 == 0
+                cv.create_line(k(x), k(y_base - 14), k(x), k(y_base), fill=TXT if main else DIM, width=max(1, k(2)))
+                cv.create_text(k(x), k(y_top + 13), text=cardinal[deg], fill=(AMBER if deg == 0 else TXT) if main else DIM,
+                               font=self.f(13 if main else 10, "bold"))
+            elif deg % 15 == 0:
+                cv.create_line(k(x), k(y_base - 9), k(x), k(y_base), fill=DIM, width=1)
+            else:
+                cv.create_line(k(x), k(y_base - 5), k(x), k(y_base), fill=OFF, width=1)
+        # centre mark - the direction you're facing
+        cv.create_polygon(k(mid - 7), k(y_base + 9), k(mid + 7), k(y_base + 9), k(mid), k(y_base + 1),
+                          fill=AMBER, outline="")
+        cv.create_line(k(mid), k(y_top), k(mid), k(y_base), fill=AMBER, width=max(1, k(2)))
+        names = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+        point = names[int((bearing + 11.25) // 22.5) % 16]
+        cv.create_text(k(mid - 6), k(86), anchor="e", text=point, fill=TXT, font=self.f(16, "bold"))
+        cv.create_text(k(mid + 6), k(86), anchor="w", text=f"{bearing:03.0f}°", fill=DIM, font=self.f(13, "bold"))
 
     def s_fuel(self, t, c):
         cv, k = self.cv, self.k

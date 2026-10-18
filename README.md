@@ -26,6 +26,7 @@ From left to right. Every section can be switched off.
 | **Speed** | Big speedometer, tachometer, gear, cruise set speed. This panel hangs slightly below the bar. |
 | **Status lights** | Park brake, retarder (with its current step), engine/Jake brake, diff lock, lift axle, wipers, side/low/high beams, beacon, hazards, plus a row of pips counting retarder steps |
 | **Warnings** | Low air, emergency brake, oil pressure, coolant temperature, low fuel, low DEF/AdBlue, battery |
+| **Compass** | A scrolling compass tape with the direction you're facing under the centre mark, plus the 16-point heading and degrees (e.g. `ENE 068°`) |
 | **Fuel** | Fuel gauge with reserve zone, DEF/AdBlue level, air pressure, average economy, and **trip fuel**: how much of the fuel on board the rest of the job needs |
 | **Gauges** | Oil pressure, oil temperature, coolant temperature, battery voltage, brake temperature |
 | **Job** | Destination, cargo, distance and time left |
