@@ -584,7 +584,8 @@ class Bar:
     def s_speed(self, t, c):
         cv, k = self.cv, self.k
         speed = abs(t.speed) * c["sp_mul"]
-        over = speed - c["limit"] if c["limit"] else -1
+        # compare what's shown, not the raw value: 55.4 shows as 55 and is not over a 55 limit
+        over = round(speed) - c["limit"] if c["limit"] else -1
         sc = GREEN if over <= 0 else (AMBER if over <= 5 else RED)
         # speedometer: the biggest thing on the bar, with the posted limit (amber) and the
         # cruise set speed (blue while engaged, grey while set but off) notched on the rim
