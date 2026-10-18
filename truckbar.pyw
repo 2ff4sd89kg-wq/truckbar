@@ -793,15 +793,42 @@ class Bar:
         dst = f"{T.text(t.cityDst)} - {T.text(t.compDst)}"
         f_dst = self.f(10, "bold")
         cv.create_text(k(10), k(22), anchor="w", text=self.fit(dst, f_dst, k(right - 10)), fill=TXT, font=f_dst)
-        # weight pinned to the right edge; the cargo name gets whatever room is left
-        f_cargo = self.f(9)
-        w_px = 0
+        # weight pinned to the right edge; the cargo name gets whatever room is left, and
+        # scrolls through it (pausing 2 s at the start of each pass) when it doesn't fit
+        f_cargo, f_weight = self.f(9), self.f(9, "bold")
+        weight, w_px = None, 0
         if t.cargoMass > 0:
             weight = f"{t.cargoMass * 2.20462:,.0f} lb" if c["ats"] else f"{t.cargoMass / 1000:,.1f} t"
-            cv.create_text(k(right), k(42), anchor="e", text=weight, fill=TXT, font=self.f(9, "bold"))
-            w_px = tkfont.Font(font=self.f(9, "bold")).measure(weight) + k(10)
-        cv.create_text(k(10), k(42), anchor="w", text=self.fit(T.text(t.cargo), f_cargo, k(right - 10) - w_px),
-                       fill=DIM, font=f_cargo)
+            w_px = tkfont.Font(font=f_weight).measure(weight) + k(10)
+        cargo = T.text(t.cargo)
+        avail = k(right - 10) - w_px
+        fm = tkfont.Font(font=f_cargo)
+        if fm.measure(cargo) <= avail:
+            cv.create_text(k(10), k(42), anchor="w", text=cargo, fill=DIM, font=f_cargo)
+        else:
+            if getattr(self, "_scroll", (None,))[0] != cargo:
+                self._scroll = (cargo, time.time())
+            loop = cargo + "      •      "
+            loop_w = fm.measure(loop)
+            speed, pause = k(35), 2.0                   # pixels per second, seconds held at the start
+            tt = (time.time() - self._scroll[1]) % (pause + loop_w / speed)
+            off = max(0.0, tt - pause) * speed
+            # the canvas can't clip, so drop the characters already scrolled past and the
+            # ones not yet in view; only a partial character at each end needs masking
+            s = loop + cargo
+            i = 0
+            while i < len(s) and fm.measure(s[:i + 1]) <= off:
+                i += 1
+            x = k(10) - (off - fm.measure(s[:i]))
+            s = s[i:]
+            j = len(s)
+            while j > 0 and fm.measure(s[:j]) > avail + k(12):
+                j -= 1
+            cv.create_text(x, k(42), anchor="w", text=s[:j], fill=DIM, font=f_cargo)
+            cv.create_rectangle(k(1), k(32), k(10), k(53), fill=PANEL, outline="")
+            cv.create_rectangle(k(10) + avail, k(32), k(right + 9), k(53), fill=PANEL, outline="")
+        if weight:
+            cv.create_text(k(right), k(42), anchor="e", text=weight, fill=TXT, font=f_weight)
         dist = t.routeDistance * (M_TO_MI if c["ats"] else 0.001)
         secs = max(0, int(t.routeTime))
         cv.create_text(k(10), k(72), anchor="w", text=f"{dist:,.0f} {'mi' if c['ats'] else 'km'}",
