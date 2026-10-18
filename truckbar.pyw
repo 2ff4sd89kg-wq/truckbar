@@ -30,6 +30,7 @@ import sys
 import threading
 import time
 import tkinter as tk
+import tkinter.font as tkfont
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import telemetry as T  # noqa: E402
@@ -260,7 +261,7 @@ class Demo:
         t.electricEnabled = t.engineEnabled = True
         t.onJob = True
         t.heading = (1.0 - (47 + 25 * math.sin(k / 4)) / 360.0) % 1.0   # swings around NE
-        t.cityDst, t.compDst, t.cargo = b"St. Louis", b"Central Civil Works", b"Utility Poles"
+        t.cityDst, t.compDst, t.cargo = b"St. Louis", b"Central Civil Works", b"Construction Machinery Components"
         if self.ets2:
             t.engineRpmMax, t.gears, t.gearDashboard, t.batteryVoltage = 2500, 12, 9, 27.6
             t.cityDst, t.compDst, t.cargo = b"Hamburg", b"Kraftwerk", b"Transformer"
@@ -491,6 +492,16 @@ class Bar:
 
     def f(self, size, weight="normal"):
         return (FONT, max(6, int(round(size * self.s["scale"]))), weight)
+
+    @staticmethod
+    def fit(text, font, max_px):
+        """Shorten text with an ellipsis so it fits in max_px at this font."""
+        fm = tkfont.Font(font=font)
+        if fm.measure(text) <= max_px:
+            return text
+        while text and fm.measure(text + "…") > max_px:
+            text = text[:-1]
+        return text.rstrip() + "…"
 
     def panel(self, w, h=BASE_H):
         k = self.k
@@ -778,12 +789,19 @@ class Bar:
         if not t.onJob:
             cv.create_text(k(140), k(56), text="No active job", fill=DIM, font=self.f(10))
             return
+        right = 270                                    # inner edge of the card (width 280)
         dst = f"{T.text(t.cityDst)} - {T.text(t.compDst)}"
-        cv.create_text(k(10), k(22), anchor="w", text=dst[:40], fill=TXT, font=self.f(10, "bold"))
-        cargo = T.text(t.cargo)[:30]
+        f_dst = self.f(10, "bold")
+        cv.create_text(k(10), k(22), anchor="w", text=self.fit(dst, f_dst, k(right - 10)), fill=TXT, font=f_dst)
+        # weight pinned to the right edge; the cargo name gets whatever room is left
+        f_cargo = self.f(9)
+        w_px = 0
         if t.cargoMass > 0:
-            cargo += f"  ·  {t.cargoMass * 2.20462:,.0f} lb" if c["ats"] else f"  ·  {t.cargoMass / 1000:,.1f} t"
-        cv.create_text(k(10), k(42), anchor="w", text=cargo, fill=DIM, font=self.f(9))
+            weight = f"{t.cargoMass * 2.20462:,.0f} lb" if c["ats"] else f"{t.cargoMass / 1000:,.1f} t"
+            cv.create_text(k(right), k(42), anchor="e", text=weight, fill=TXT, font=self.f(9, "bold"))
+            w_px = tkfont.Font(font=self.f(9, "bold")).measure(weight) + k(10)
+        cv.create_text(k(10), k(42), anchor="w", text=self.fit(T.text(t.cargo), f_cargo, k(right - 10) - w_px),
+                       fill=DIM, font=f_cargo)
         dist = t.routeDistance * (M_TO_MI if c["ats"] else 0.001)
         secs = max(0, int(t.routeTime))
         cv.create_text(k(10), k(72), anchor="w", text=f"{dist:,.0f} {'mi' if c['ats'] else 'km'}",
