@@ -734,7 +734,13 @@ class Bar:
             bar = t.airPressure * PSI_TO_BAR
             self.dial(134, 46, 30, bar, 10, "AIR BAR", f"{bar:.1f}", ac)
         # average economy, and how much of the fuel on board the rest of the job needs
-        lpk = t.fuelAvgConsumption            # litres per km, as the game reports it
+        # litres per km, as the game reports it. While driving it drops to 0 for a moment
+        # between updates, which made the reading blink - hold the last real value instead.
+        if t.fuelAvgConsumption > 0:
+            self._last_lpk = t.fuelAvgConsumption
+        lpk = getattr(self, "_last_lpk", 0.0)
+        if t.fuelRange > 0:
+            self._last_range = t.fuelRange
         if lpk > 0:
             econ = (1 / lpk) * 2.35215 if ats else lpk * 100   # mpg (US) or L/100km
             cv.create_text(k(212), k(30), text=f"{econ:.1f}", fill=TXT, font=self.f(13, "bold"))
@@ -743,7 +749,7 @@ class Bar:
         cv.create_text(k(212), k(48), text="AVG MPG" if ats else "L/100KM", fill=DIM, font=self.f(7))
         # range, and whether it covers the rest of the job. Needing a stop on a long haul is
         # normal, so that is a steady amber "stop in", not an alarm; red only when nearly dry.
-        rng_km = t.fuelRange if t.fuelRange > 0 else (t.fuel / lpk if lpk > 0 else 0)
+        rng_km = getattr(self, "_last_range", 0.0) or (t.fuel / lpk if lpk > 0 else 0)
         dist = (lambda km: km * 0.621371) if ats else (lambda km: km)
         unit = "mi" if ats else "km"
         margin = float(self.s.get("fuel_margin_km", 120))
