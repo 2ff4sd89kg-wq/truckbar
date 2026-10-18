@@ -27,9 +27,9 @@ From left to right. Every section can be switched off.
 | **Status lights** | Park brake, retarder (with its current step), engine/Jake brake, diff lock, lift axle, wipers, side/low/high beams, beacon, hazards, plus a row of pips counting retarder steps |
 | **Warnings** | Low air, emergency brake, oil pressure, coolant temperature, low fuel, low DEF/AdBlue, battery |
 | **Compass** | A scrolling compass tape with the direction you're facing under the centre mark, plus the 16-point heading and degrees (e.g. `ENE 068°`) |
-| **Fuel** | Fuel gauge with reserve zone, DEF/AdBlue level, air pressure, average economy, and **trip fuel**: how much of the fuel on board the rest of the job needs |
+| **Fuel** | Fuel gauge with reserve zone, DEF/AdBlue level, air pressure, average economy, and **range / fuel stop**: whether your fuel covers the rest of the job, or how far you can go before you need to stop |
 | **Gauges** | Oil pressure, oil temperature, coolant temperature, battery voltage, brake temperature |
-| **Job** | Destination, cargo, distance and time left |
+| **Job** | Destination, cargo and its weight, distance and time left |
 | **Clock** | In-game day and time (12- or 24-hour) and time until you need to rest |
 
 ### Reading the speedometer
@@ -48,13 +48,17 @@ The bands are scaled to your engine's governed RPM. For a typical 2,100 RPM truc
 | Amber | about 1,700–1,900 | Working hard. The RPM number turns amber. |
 | Red | about 1,900 and up | Near the governor. The RPM number **blinks red**. |
 
-### Trip fuel colours
+### Range and fuel stops
 
-| Colour | Meaning |
+TruckBar compares your fuel range with the distance left on the job, keeping a safety
+margin in hand (75 mi / 120 km by default; change it in Settings).
+
+| Shows | Meaning |
 |---|---|
-| Green | The job needs under 75% of the fuel on board |
-| Amber | It needs 75–100%. Plan a stop. |
-| Red | You won't make it without refuelling |
+| **640 mi**, *RANGE · MAKES IT* (green) | You can finish the job on the fuel you have |
+| **420 mi**, *FUEL STOP IN* (amber, steady) | You'll need to refuel. Start looking within that distance. Normal on a long haul. |
+| **40 mi**, *FUEL STOP IN* (red) | Under about 60 mi / 100 km of range left |
+| **RANGE** (white) | No job: just how far the fuel on board will take you |
 
 ### Gear names
 
@@ -161,6 +165,7 @@ Once you're driving, the game holds the mouse, so TruckBar is controlled by a ho
 - **Opacity:** 20% to 100%.
 - **Size:** 50% to 200%.
 - **Gear names like the dash:** see [Gear names](#gear-names).
+- **Fuel stop margin:** how much range to keep in reserve when working out the fuel stop.
 - **24-hour clock:** off gives 12-hour with AM/PM.
 - **Position:** arrow buttons nudge the bar. **Centre along top** puts it back.
 - **Lock position:** stops accidental dragging.

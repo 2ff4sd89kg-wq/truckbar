@@ -62,7 +62,7 @@ SECTIONS = [
     ("lamps", "Status lights + retarder steps", 280),
     ("warnings", "Warning lights", 156),
     ("compass", "Compass tape", 236),
-    ("fuel", "Fuel, DEF, air pressure, MPG, trip fuel", 256),
+    ("fuel", "Fuel, DEF, air pressure, MPG, range / fuel stop", 256),
     ("gauges", "Gauges: oil, water, battery, brakes", 344),
     ("job", "Job: destination, distance, time", 280),
     ("clock", "Clock + rest timer", 110),
@@ -71,7 +71,7 @@ SECTIONS = [
 SETTINGS = os.environ.get("TRUCKBAR_SETTINGS") or os.path.join(os.environ.get("APPDATA", "."), "TruckBar", "settings.json")
 SETTINGS_DIR = os.path.dirname(os.path.abspath(SETTINGS))
 DEFAULTS = {"x": None, "y": 0, "scale": 1.0, "alpha": 0.85, "locked": False,
-            "gear_names": "auto", "clock_24h": False, "show": {k: True for k, _, _ in SECTIONS}}
+            "gear_names": "auto", "clock_24h": False, "fuel_margin_km": 120, "show": {k: True for k, _, _ in SECTIONS}}
 
 MPS_TO_MPH, MPS_TO_KMH = 2.23694, 3.6
 M_TO_MI, L_TO_GAL = 0.000621371, 0.264172
@@ -251,6 +251,8 @@ class Demo:
         t.blinkerLeftOn = int(k * 2) % 2 == 0
         t.fuel, t.fuelCapacity, t.fuelWarningFactor = 420, 1135, 0.15
         t.fuelAvgConsumption = 0.36            # L/km, about 6.5 mpg
+        t.fuelRange = 420 / 0.36               # km - less than the route, so a fuel stop shows
+        t.cargoMass = 18870                    # kg, 41,600 lb
         t.adblue, t.adblueCapacity = 60, 80
         t.airPressure, t.airPressureWarningLevel = 118, 65
         t.oilPressure, t.oilTemperature, t.waterTemperature = 55, 98, 88
@@ -390,6 +392,17 @@ class Bar:
         tk.Checkbutton(win, text="Gear names like the dash (5L, 5H) instead of 1-18", variable=self._gear,
                        command=lambda: self.set_live("gear_names", "auto" if self._gear.get() else "numbers"),
                        **chk).grid(row=row, column=0, columnspan=2, **pad)
+        row += 1
+        tk.Label(win, text="Fuel stop margin", **lab).grid(row=row, column=0, **pad)
+        margins = [("25 mi / 40 km", 40), ("50 mi / 80 km", 80), ("75 mi / 120 km", 120), ("100 mi / 160 km", 160)]
+        cur = min(margins, key=lambda m: abs(m[1] - s.get("fuel_margin_km", 120)))[0]
+        self._margin = tk.StringVar(value=cur)
+        om = tk.OptionMenu(win, self._margin, *[m[0] for m in margins],
+                           command=lambda v: self.set_live("fuel_margin_km", dict(margins)[v]))
+        om.configure(bg=PANEL, fg=TXT, activebackground=EDGE, activeforeground=TXT, highlightthickness=0,
+                     relief="flat", font=(FONT, 10))
+        om["menu"].configure(bg=PANEL, fg=TXT, font=(FONT, 10))
+        om.grid(row=row, column=1, padx=14, sticky="w")
         row += 1
         self._clock = tk.BooleanVar(value=s.get("clock_24h", False))
         tk.Checkbutton(win, text="24-hour clock (off = 12-hour with AM/PM)", variable=self._clock,
@@ -717,13 +730,25 @@ class Bar:
         else:
             cv.create_text(k(212), k(30), text="–", fill=DIM, font=self.f(13, "bold"))
         cv.create_text(k(212), k(48), text="AVG MPG" if ats else "L/100KM", fill=DIM, font=self.f(7))
-        if t.onJob and lpk > 0 and t.fuel > 0 and t.routeDistance > 0:
-            pct = (t.routeDistance / 1000 * lpk) / t.fuel * 100
-            pc = GREEN if pct < 75 else (AMBER if pct <= 100 else RED)
-            cv.create_text(k(212), k(74), text=f"{pct:.0f}%", fill=pc, font=self.f(13, "bold"))
+        # range, and whether it covers the rest of the job. Needing a stop on a long haul is
+        # normal, so that is a steady amber "stop in", not an alarm; red only when nearly dry.
+        rng_km = t.fuelRange if t.fuelRange > 0 else (t.fuel / lpk if lpk > 0 else 0)
+        dist = (lambda km: km * 0.621371) if ats else (lambda km: km)
+        unit = "mi" if ats else "km"
+        margin = float(self.s.get("fuel_margin_km", 120))
+        route_km = t.routeDistance / 1000
+        if rng_km <= 0:
+            val, lab, col = "–", "RANGE", DIM
+        elif t.onJob and route_km > 0 and rng_km - margin < route_km:
+            stop = max(0.0, rng_km - margin)
+            val, lab = f"{dist(stop):,.0f} {unit}", "FUEL STOP IN"
+            col = RED if rng_km < 100 else AMBER
+        elif t.onJob and route_km > 0:
+            val, lab, col = f"{dist(rng_km):,.0f} {unit}", "RANGE · MAKES IT", GREEN
         else:
-            cv.create_text(k(212), k(74), text="–", fill=DIM, font=self.f(13, "bold"))
-        cv.create_text(k(212), k(92), text="TRIP FUEL", fill=DIM, font=self.f(7))
+            val, lab, col = f"{dist(rng_km):,.0f} {unit}", "RANGE", TXT
+        cv.create_text(k(212), k(74), text=val, fill=col, font=self.f(12, "bold"))
+        cv.create_text(k(212), k(92), text=lab, fill=DIM, font=self.f(7))
 
     def s_gauges(self, t, c):
         ats = c["ats"]
@@ -755,7 +780,10 @@ class Bar:
             return
         dst = f"{T.text(t.cityDst)} - {T.text(t.compDst)}"
         cv.create_text(k(10), k(22), anchor="w", text=dst[:40], fill=TXT, font=self.f(10, "bold"))
-        cv.create_text(k(10), k(42), anchor="w", text=T.text(t.cargo)[:40], fill=DIM, font=self.f(9))
+        cargo = T.text(t.cargo)[:30]
+        if t.cargoMass > 0:
+            cargo += f"  ·  {t.cargoMass * 2.20462:,.0f} lb" if c["ats"] else f"  ·  {t.cargoMass / 1000:,.1f} t"
+        cv.create_text(k(10), k(42), anchor="w", text=cargo, fill=DIM, font=self.f(9))
         dist = t.routeDistance * (M_TO_MI if c["ats"] else 0.001)
         secs = max(0, int(t.routeTime))
         cv.create_text(k(10), k(72), anchor="w", text=f"{dist:,.0f} {'mi' if c['ats'] else 'km'}",
