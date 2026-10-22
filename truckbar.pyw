@@ -63,8 +63,8 @@ SECTIONS = [
     ("lamps", "Status lights + retarder steps", 280),
     ("warnings", "Warning lights", 156),
     ("compass", "Compass tape", 236),
-    ("fuel", "Fuel, DEF, air pressure, MPG, range / fuel stop", 256),
-    ("gauges", "Gauges: oil, water, battery, brakes", 344),
+    ("fuel", "Fuel, DEF, MPG, range / fuel stop", 200),
+    ("gauges", "Gauges: oil, air, water, battery, brakes", 412),
     ("job", "Job: destination, distance, time", 280),
     ("clock", "Clock + rest timer", 110),
 ]
@@ -727,12 +727,6 @@ class Bar:
             on = i < dq
             cv.create_rectangle(k(66 + i * 9), k(90), k(73 + i * 9), k(98),
                                 fill=(AMBER if dq <= 1 else BLUE) if on else "", outline=OFF)
-        ac = RED if (t.airPressureWarning or t.airPressureEmergency) else TXT
-        if ats:
-            self.dial(134, 46, 30, t.airPressure, 150, "AIR PSI", f"{t.airPressure:.0f}", ac)
-        else:
-            bar = t.airPressure * PSI_TO_BAR
-            self.dial(134, 46, 30, bar, 10, "AIR BAR", f"{bar:.1f}", ac)
         # average economy, and how much of the fuel on board the rest of the job needs
         # litres per km, as the game reports it. While driving it drops to 0 for a moment
         # between updates, which made the reading blink - hold the last real value instead.
@@ -743,10 +737,10 @@ class Bar:
             self._last_range = t.fuelRange
         if lpk > 0:
             econ = (1 / lpk) * 2.35215 if ats else lpk * 100   # mpg (US) or L/100km
-            cv.create_text(k(212), k(30), text=f"{econ:.1f}", fill=TXT, font=self.f(13, "bold"))
+            cv.create_text(k(144), k(30), text=f"{econ:.1f}", fill=TXT, font=self.f(13, "bold"))
         else:
-            cv.create_text(k(212), k(30), text="–", fill=DIM, font=self.f(13, "bold"))
-        cv.create_text(k(212), k(48), text="AVG MPG" if ats else "L/100KM", fill=DIM, font=self.f(7))
+            cv.create_text(k(144), k(30), text="–", fill=DIM, font=self.f(13, "bold"))
+        cv.create_text(k(144), k(48), text="AVG MPG" if ats else "L/100KM", fill=DIM, font=self.f(7))
         # range, and whether it covers the rest of the job. Needing a stop on a long haul is
         # normal, so that is a steady amber "stop in", not an alarm; red only when nearly dry.
         rng_km = getattr(self, "_last_range", 0.0) or (t.fuel / lpk if lpk > 0 else 0)
@@ -764,8 +758,8 @@ class Bar:
             val, lab, col = f"{dist(rng_km):,.0f} {unit}", "RANGE · MAKES IT", GREEN
         else:
             val, lab, col = f"{dist(rng_km):,.0f} {unit}", "RANGE", TXT
-        cv.create_text(k(212), k(74), text=val, fill=col, font=self.f(12, "bold"))
-        cv.create_text(k(212), k(92), text=lab, fill=DIM, font=self.f(7))
+        cv.create_text(k(144), k(74), text=val, fill=col, font=self.f(12, "bold"))
+        cv.create_text(k(144), k(92), text=lab, fill=DIM, font=self.f(7))
 
     def s_gauges(self, t, c):
         ats = c["ats"]
@@ -774,7 +768,12 @@ class Bar:
         oil_t, water_t, brake_t = temp(t.oilTemperature), temp(t.waterTemperature), temp(t.brakeTemperature)
         tmax = 300 if ats else 150
         warn_v = t.batteryVoltageWarningLevel or 0
+        air_col = RED if (t.airPressureWarning or t.airPressureEmergency) else TXT
         g = [
+            # air pressure first, then oil pressure (moved out of the fuel tray)
+            (t.airPressure, 0, 150, "AIR PSI", f"{t.airPressure:.0f}", air_col, None)
+            if ats else
+            (t.airPressure * PSI_TO_BAR, 0, 10, "AIR BAR", f"{t.airPressure * PSI_TO_BAR:.1f}", air_col, None),
             (t.oilPressure, 0, 100, "OIL PSI", f"{t.oilPressure:.0f}", RED if t.oilPressureWarning else TXT, None)
             if ats else
             (t.oilPressure * PSI_TO_BAR, 0, 7, "OIL BAR", f"{t.oilPressure * PSI_TO_BAR:.1f}",
