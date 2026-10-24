@@ -1,10 +1,9 @@
-"""Watches the player's own high-beam and wiper controls, so TruckBar can show what the
-telemetry can't: the high-beam *switch* (vs. lamps dipped by automatic high beams) and
-the wiper *speed* (the telemetry only says wipers on/off).
+"""Watches the player's own wiper controls, so TruckBar can show what the telemetry can't:
+the wiper *speed* (the telemetry only says wipers on/off). Also reads whether automatic
+high beams are switched on in the game's options.
 
 The bindings come from the profile's controls.sii - whatever keys or wheel/joystick
 buttons that player has set for:
-    hblight      high beams on/off
     wipers       wipers: next speed
     wipersback   wipers: previous speed
 Keyboard keys are read with GetAsyncKeyState and game-controller buttons with the winmm
@@ -18,7 +17,7 @@ import re
 import threading
 import time
 
-ACTIONS = ("hblight", "wipers", "wipersback")
+ACTIONS = ("wipers", "wipersback")
 
 _VK = {"space": 0x20, "enter": 0x0D, "numenter": 0x0D, "tab": 0x09, "esc": 0x1B, "back": 0x08,
        "backspace": 0x08, "del": 0x2E, "ins": 0x2D, "home": 0x24, "end": 0x23, "pgup": 0x21,
@@ -85,6 +84,19 @@ def profile_dir(documents, game):
     return best[1] if best else None
 
 
+def auto_high_beams(documents, game):
+    """Whether "Automatic high beams" is on in the game's options. The game logs the setting
+    when the profile loads and again whenever it changes, so the last mention is current."""
+    log = os.path.join(documents, "Euro Truck Simulator 2" if game == 1 else "American Truck Simulator",
+                       "game.log.txt")
+    try:
+        txt = open(log, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return False
+    found = re.findall(r'uset g_automatic_high_beams "(\d)"', txt)
+    return bool(found) and found[-1] == "1"
+
+
 def read_bindings(controls_path):
     """-> {action: {"keys": [vk...], "buttons": [(vid, pid, button_index)...]}}"""
     txt = open(controls_path, encoding="utf-8", errors="replace").read()
@@ -120,7 +132,7 @@ def joystick_ids():
 
 
 class ControlWatcher(threading.Thread):
-    """Counts presses of the player's high-beam and wiper controls."""
+    """Counts presses of the player's wiper controls."""
 
     def __init__(self, documents_folder, game_getter):
         super().__init__(daemon=True)
@@ -130,6 +142,7 @@ class ControlWatcher(threading.Thread):
         self.counts = {a: 0 for a in ACTIONS}
         self.bindings = {}
         self.summary = "no bindings read yet"
+        self.auto_high_beams = False
 
     def take(self):
         """Presses since the last call, per action."""
@@ -152,7 +165,7 @@ class ControlWatcher(threading.Thread):
 
     def run(self):
         self.joy = {}
-        last_reload = 0.0
+        last_reload = last_auto = 0.0
         down = {a: False for a in ACTIONS}
         info = JOYINFOEX()
         info.dwSize = ctypes.sizeof(info)
@@ -165,6 +178,9 @@ class ControlWatcher(threading.Thread):
                 except Exception as ex:
                     self.summary = f"bindings error: {ex}"
                 last_reload = now
+            if now - last_auto > 5:             # picks up a change in the game's options
+                self.auto_high_beams = auto_high_beams(self.documents, self.game_getter() or 2)
+                last_auto = now
             buttons_by_joy = {}
             for action, b in self.bindings.items():
                 pressed = any(_user32.GetAsyncKeyState(vk) & 0x8000 for vk in b["keys"])

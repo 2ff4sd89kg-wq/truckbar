@@ -285,9 +285,9 @@ class Bar:
         self.win = None                      # the settings window, when open
         self.hotkey = Hotkey()
         self.hotkey.start()
-        # the high-beam switch and wiper speed, followed from the player's own controls
+        # the wiper speed, followed from the player's own controls
         self.game_id = None
-        self.hb_switch, self.wiper_level, self.wiper_changed = False, 0, 0.0
+        self.wiper_level, self.wiper_changed = 0, 0.0
         self.watcher = None if demo else CTL.ControlWatcher(documents_folder(), lambda: self.game_id)
         if self.watcher:
             self.watcher.start()
@@ -581,34 +581,31 @@ class Bar:
                x + 22 * d, y + 4, x + 12 * d, y + 4, x + 12 * d, y + 9]
         self.cv.create_polygon(*[k(p) for p in pts], fill=GREEN if on else OFF, outline="")
 
-    # -- high-beam switch and wiper speed ------------------------------------------
+    # -- wiper speed --------------------------------------------------------------
     def follow_controls(self, t):
-        """The telemetry only has 'high-beam lamps lit' and 'wipers on/off'. Count the player's
-        own presses for the switch and the speed, and let the telemetry correct them."""
+        """The telemetry only has 'wipers on/off'. Count the player's own presses for the speed,
+        and let the telemetry correct it."""
         steps = int(self.s.get("wiper_speeds", 3))
         if self.watcher:
             presses = self.watcher.take()
+            if t.paused:                    # the game ignores the stalk while paused, so do we
+                return
         else:   # demo: cycle through everything
             k = int(time.time() - getattr(self.reader, "t0", 0))
-            presses = {"hblight": 1 if k % 6 == 0 and k != getattr(self, "_dk", -1) else 0,
-                       "wipers": 1 if k % 3 == 0 and k != getattr(self, "_dk", -1) else 0, "wipersback": 0}
+            presses = {"wipers": 1 if k % 3 == 0 and k != getattr(self, "_dk", -1) else 0, "wipersback": 0}
+            if presses["wipers"] and self.wiper_level >= steps:              # back to off, then round again
+                presses["wipers"], presses["wipersback"] = 0, steps
             self._dk = k
-            t.lightsBeamHigh = self.hb_switch and (k % 6) < 3          # auto dips half the time
+            t.lightsBeamHigh = (k % 8) < 4
             t.wipers = self.wiper_level > 0
         now = time.time()
-        if presses["hblight"] % 2:
-            self.hb_switch = not self.hb_switch
         for _ in range(presses["wipers"]):
-            self.wiper_level = (self.wiper_level + 1) % (steps + 1)
+            self.wiper_level = min(self.wiper_level + 1, steps)    # the stalk stops at the top speed
             self.wiper_changed = now
         for _ in range(presses["wipersback"]):
             self.wiper_level = max(0, self.wiper_level - 1)
             self.wiper_changed = now
         # let the game correct us (allowing a moment for it to catch up with a press)
-        if t.lightsBeamHigh:
-            self.hb_switch = True
-        if not (t.lightsBeamLow or t.lightsBeamHigh or t.lightsParking):
-            self.hb_switch = False
         if now - self.wiper_changed > 1.5:
             if not t.wipers:
                 self.wiper_level = 0
@@ -718,13 +715,12 @@ class Bar:
             self.badge(x0 + 204, y1, "WIPE", None, 62)
         self.badge(x0, y2, "SIDE", GREEN if t.lightsParking else None, 40)
         self.badge(x0 + 46, y2, "LOW", GREEN if t.lightsBeamLow else None, 40)
-        # solid blue = lamps lit; blue outline "AUTO" = switch on but dipped by automatic high beams
-        if t.lightsBeamHigh:
-            self.badge(x0 + 92, y2, "HIGH", BLUE, 40)
-        elif self.hb_switch:
-            self.badge(x0 + 92, y2, "AUTO", BLUE, 40, outline_only=True)
+        # The telemetry's high beam is the switch: automatic high beams dip the lamps without it
+        # changing. So with that option on, label it AUTO (blue = switch on, dim = off).
+        if self.watcher and self.watcher.auto_high_beams:
+            self.badge(x0 + 92, y2, "AUTO", BLUE if t.lightsBeamHigh else None, 40)
         else:
-            self.badge(x0 + 92, y2, "HIGH", None, 40)
+            self.badge(x0 + 92, y2, "HIGH", BLUE if t.lightsBeamHigh else None, 40)
         self.badge(x0 + 138, y2, "BCN", AMBER if t.lightsBeacon else None, 40)
         self.badge(x0 + 184, y2, "HAZ", AMBER if t.lightsHazard else None, 40)
         if steps:

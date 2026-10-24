@@ -62,20 +62,23 @@ margin in hand (75 mi / 120 km by default; change it in Settings).
 
 ### High beams and wipers
 
-The game's telemetry only says whether the high-beam lamps are lit and whether the wipers are
-on at all. TruckBar fills the gap by watching **your own controls**: it reads the keys and
-wheel/controller buttons you've bound to *high beams*, *wipers* and *wipers back* from your
-profile's `controls.sii`, so it works with whatever bindings you use. It doesn't need focus.
-
 | Shows | Meaning |
 |---|---|
-| **HIGH** (solid blue) | High-beam lamps are lit |
-| **AUTO** (blue outline) | Your high-beam switch is on, but automatic high beams have dipped them for traffic |
-| **WIPE INT / LO / HI** (light, medium, deep purple) | Wiper speed |
+| **HIGH** (blue) | High beams on. Shown when *Automatic high beams* is off in the game's options |
+| **AUTO** (blue) | *Automatic high beams* is on in the options and your high-beam switch is on. The truck dips and raises them for traffic by itself |
+| **AUTO** (dim) | *Automatic high beams* is on, but your high-beam switch is off |
+| **WIPE INT / LO / HI** (light, medium, deep purple) | Wiper speed. Stops at the top speed, as the stalk does |
 
-It corrects itself from the telemetry: wipers off resets the speed, lit high beams turn the
-switch on. If TruckBar wasn't running when you pressed a control, it catches up at the next
-change. Trucks with only two wiper speeds: set **Wiper speeds** to 2 in Settings.
+The game's telemetry reports the high-beam *switch*, not the automatic dipping, so AUTO stays
+blue while the truck dims for traffic. TruckBar reads the *Automatic high beams* option from
+the game's log, so a change in the options shows within a few seconds.
+
+The telemetry only says whether the wipers are on at all. For the speed, TruckBar watches
+**your own controls**: it reads the keys and wheel/controller buttons you've bound to
+*wipers* and *wipers back* from your profile's `controls.sii`, so it works with whatever
+bindings you use, and doesn't need focus. Presses while the game is paused are ignored, as
+the game ignores them. Turning the wipers off resets the speed. Trucks with only two wiper
+speeds: set **Wiper speeds** to 2 in Settings.
 
 ### Gear names
 
