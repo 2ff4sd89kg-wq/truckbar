@@ -24,7 +24,7 @@ From left to right. Every section can be switched off.
 |---|---|
 | **Signals** | Left/right turn signals and the posted speed limit (US sign in ATS, EU roundel in ETS2) |
 | **Speed** | Big speedometer, tachometer, gear, cruise set speed. This panel hangs slightly below the bar. |
-| **Status lights** | Park brake, retarder (with its current step), engine/Jake brake, diff lock, lift axle, wipers, side/low/high beams, beacon, hazards, plus a row of pips counting retarder steps |
+| **Status lights** | Park brake, retarder (with its current step), engine/Jake brake, diff lock, lift axle, **wiper speed**, side/low/high beams (with **automatic high beams**), beacon, hazards, plus a row of pips counting retarder steps |
 | **Warnings** | Low air, emergency brake, oil pressure, coolant temperature, low fuel, low DEF/AdBlue, battery |
 | **Compass** | A scrolling compass tape with the direction you're facing under the centre mark, plus the 16-point heading and degrees (e.g. `ENE 068°`) |
 | **Fuel** | Fuel gauge with reserve zone, DEF/AdBlue level, air pressure, average economy, and **range / fuel stop**: whether your fuel covers the rest of the job, or how far you can go before you need to stop |
@@ -59,6 +59,23 @@ margin in hand (75 mi / 120 km by default; change it in Settings).
 | **420 mi**, *FUEL STOP IN* (amber, steady) | You'll need to refuel. Start looking within that distance. Normal on a long haul. |
 | **40 mi**, *FUEL STOP IN* (red) | Under about 60 mi / 100 km of range left |
 | **RANGE** (white) | No job: just how far the fuel on board will take you |
+
+### High beams and wipers
+
+The game's telemetry only says whether the high-beam lamps are lit and whether the wipers are
+on at all. TruckBar fills the gap by watching **your own controls**: it reads the keys and
+wheel/controller buttons you've bound to *high beams*, *wipers* and *wipers back* from your
+profile's `controls.sii`, so it works with whatever bindings you use. It doesn't need focus.
+
+| Shows | Meaning |
+|---|---|
+| **HIGH** (solid blue) | High-beam lamps are lit |
+| **AUTO** (blue outline) | Your high-beam switch is on, but automatic high beams have dipped them for traffic |
+| **WIPE INT / LO / HI** (light, medium, deep purple) | Wiper speed |
+
+It corrects itself from the telemetry: wipers off resets the speed, lit high beams turn the
+switch on. If TruckBar wasn't running when you pressed a control, it catches up at the next
+change. Trucks with only two wiper speeds: set **Wiper speeds** to 2 in Settings.
 
 ### Gear names
 
@@ -166,6 +183,7 @@ Once you're driving, the game holds the mouse, so TruckBar is controlled by a ho
 - **Size:** 50% to 200%.
 - **Gear names like the dash:** see [Gear names](#gear-names).
 - **Fuel stop margin:** how much range to keep in reserve when working out the fuel stop.
+- **Wiper speeds:** 3 (intermittent, low, high) or 2 (low, high), to match your truck.
 - **24-hour clock:** off gives 12-hour with AM/PM.
 - **Position:** arrow buttons nudge the bar. **Centre along top** puts it back.
 - **Lock position:** stops accidental dragging.

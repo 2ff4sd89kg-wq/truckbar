@@ -34,6 +34,7 @@ import tkinter.font as tkfont
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import telemetry as T  # noqa: E402
+import controls as CTL  # noqa: E402
 
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(2)   # real pixels on scaled (125%+) displays
@@ -44,6 +45,8 @@ except Exception:
 BG, PANEL, EDGE = "#15171b", "#1f2228", "#2c3038"
 TXT, DIM, OFF = "#e8e8e8", "#8a8f98", "#3a3f48"
 GREEN, AMBER, RED, BLUE = "#4cd964", "#ffbf3f", "#ff4d4d", "#4d9bff"
+# wiper speeds: intermittent, low, high - three purples, light to deep
+WIPER_PURPLES = ["#c9a9ff", "#9a6cf2", "#6b33d6"]
 FONT = "Segoe UI"
 
 BASE_H = 112                         # bar height at scale 1.0 (real pixels)
@@ -72,7 +75,7 @@ SECTIONS = [
 SETTINGS = os.environ.get("TRUCKBAR_SETTINGS") or os.path.join(os.environ.get("APPDATA", "."), "TruckBar", "settings.json")
 SETTINGS_DIR = os.path.dirname(os.path.abspath(SETTINGS))
 DEFAULTS = {"x": None, "y": 0, "scale": 1.0, "alpha": 0.85, "locked": False,
-            "gear_names": "auto", "clock_24h": False, "fuel_margin_km": 120, "show": {k: True for k, _, _ in SECTIONS}}
+            "gear_names": "auto", "clock_24h": False, "fuel_margin_km": 120, "wiper_speeds": 3, "show": {k: True for k, _, _ in SECTIONS}}
 
 MPS_TO_MPH, MPS_TO_KMH = 2.23694, 3.6
 M_TO_MI, L_TO_GAL = 0.000621371, 0.264172
@@ -282,6 +285,12 @@ class Bar:
         self.win = None                      # the settings window, when open
         self.hotkey = Hotkey()
         self.hotkey.start()
+        # the high-beam switch and wiper speed, followed from the player's own controls
+        self.game_id = None
+        self.hb_switch, self.wiper_level, self.wiper_changed = False, 0, 0.0
+        self.watcher = None if demo else CTL.ControlWatcher(documents_folder(), lambda: self.game_id)
+        if self.watcher:
+            self.watcher.start()
 
         self.root = tk.Tk()
         self.root.title("TruckBar")
@@ -405,6 +414,16 @@ class Bar:
         om["menu"].configure(bg=PANEL, fg=TXT, font=(FONT, 10))
         om.grid(row=row, column=1, padx=14, sticky="w")
         row += 1
+        tk.Label(win, text="Wiper speeds", **lab).grid(row=row, column=0, **pad)
+        wopts = [("3 - intermittent, low, high", 3), ("2 - low, high", 2)]
+        self._wipers = tk.StringVar(value=[n for n, v in wopts if v == s.get("wiper_speeds", 3)][0])
+        wm = tk.OptionMenu(win, self._wipers, *[n for n, _ in wopts],
+                           command=lambda v: self.set_live("wiper_speeds", dict(wopts)[v]))
+        wm.configure(bg=PANEL, fg=TXT, activebackground=EDGE, activeforeground=TXT, highlightthickness=0,
+                     relief="flat", font=(FONT, 10))
+        wm["menu"].configure(bg=PANEL, fg=TXT, font=(FONT, 10))
+        wm.grid(row=row, column=1, padx=14, sticky="w")
+        row += 1
         self._clock = tk.BooleanVar(value=s.get("clock_24h", False))
         tk.Checkbutton(win, text="24-hour clock (off = 12-hour with AM/PM)", variable=self._clock,
                        command=lambda: self.set_live("clock_24h", self._clock.get()),
@@ -470,6 +489,8 @@ class Bar:
                                   f"the game has revision {t.plugin_revision} - see the README")
             elif t is not None and t.sdkActive:
                 self.seen_game = True
+                self.game_id = t.game
+                self.follow_controls(t)
                 self.draw(t)
             else:
                 self.draw_waiting()
@@ -543,12 +564,14 @@ class Bar:
             ly = cy + r * 0.55 + 26 if r >= 50 else cy + r + 10
             cv.create_text(k(cx), k(ly), text=label, fill=DIM, font=self.f(8 if r > 31 else 7))
 
-    def badge(self, x, y, label, state_color, w=34):
+    def badge(self, x, y, label, state_color, w=34, outline_only=False, text_color=None):
         k = self.k
         lit = state_color is not None
+        fill = state_color if lit and not outline_only else ""
         self.cv.create_rectangle(k(x), k(y), k(x + w), k(y + 18), outline=state_color if lit else OFF,
-                                 fill=state_color if lit else "", width=1)
-        self.cv.create_text(k(x + w / 2), k(y + 9), text=label, fill=BG if lit else DIM, font=self.f(8, "bold"))
+                                 fill=fill, width=2 if outline_only else 1)
+        tc = text_color or (state_color if outline_only else BG) if lit else DIM
+        self.cv.create_text(k(x + w / 2), k(y + 9), text=label, fill=tc, font=self.f(8, "bold"))
 
     def arrow(self, x, y, left, on):
         """x is the tip; the shaft runs back toward the sign."""
@@ -557,6 +580,40 @@ class Bar:
         pts = [x, y, x + 12 * d, y - 9, x + 12 * d, y - 4, x + 22 * d, y - 4,
                x + 22 * d, y + 4, x + 12 * d, y + 4, x + 12 * d, y + 9]
         self.cv.create_polygon(*[k(p) for p in pts], fill=GREEN if on else OFF, outline="")
+
+    # -- high-beam switch and wiper speed ------------------------------------------
+    def follow_controls(self, t):
+        """The telemetry only has 'high-beam lamps lit' and 'wipers on/off'. Count the player's
+        own presses for the switch and the speed, and let the telemetry correct them."""
+        steps = int(self.s.get("wiper_speeds", 3))
+        if self.watcher:
+            presses = self.watcher.take()
+        else:   # demo: cycle through everything
+            k = int(time.time() - getattr(self.reader, "t0", 0))
+            presses = {"hblight": 1 if k % 6 == 0 and k != getattr(self, "_dk", -1) else 0,
+                       "wipers": 1 if k % 3 == 0 and k != getattr(self, "_dk", -1) else 0, "wipersback": 0}
+            self._dk = k
+            t.lightsBeamHigh = self.hb_switch and (k % 6) < 3          # auto dips half the time
+            t.wipers = self.wiper_level > 0
+        now = time.time()
+        if presses["hblight"] % 2:
+            self.hb_switch = not self.hb_switch
+        for _ in range(presses["wipers"]):
+            self.wiper_level = (self.wiper_level + 1) % (steps + 1)
+            self.wiper_changed = now
+        for _ in range(presses["wipersback"]):
+            self.wiper_level = max(0, self.wiper_level - 1)
+            self.wiper_changed = now
+        # let the game correct us (allowing a moment for it to catch up with a press)
+        if t.lightsBeamHigh:
+            self.hb_switch = True
+        if not (t.lightsBeamLow or t.lightsBeamHigh or t.lightsParking):
+            self.hb_switch = False
+        if now - self.wiper_changed > 1.5:
+            if not t.wipers:
+                self.wiper_level = 0
+            elif self.wiper_level == 0:
+                self.wiper_level = 1
 
     # -- the bar ----------------------------------------------------------------
     def draw_waiting(self, message=None):
@@ -650,10 +707,24 @@ class Bar:
         self.badge(x0 + 76, y1, "J" if c["ats"] else "E", GREEN if t.motorBrake else None, 30)
         self.badge(x0 + 112, y1, "DIFF", AMBER if t.differentialLock else None, 40)
         self.badge(x0 + 158, y1, "LIFT", AMBER if t.liftAxleIndicator else None, 40)
-        self.badge(x0 + 204, y1, "WIPE", GREEN if t.wipers else None, 50)
+        lvl = min(self.wiper_level, 3) if t.wipers else 0
+        steps_w = int(self.s.get("wiper_speeds", 3))
+        names = {1: "INT", 2: "LO", 3: "HI"} if steps_w >= 3 else {1: "LO", 2: "HI"}
+        if lvl:
+            col = WIPER_PURPLES[min(lvl, 3) - 1] if steps_w >= 3 else WIPER_PURPLES[lvl]
+            self.badge(x0 + 204, y1, f"WIPE {names.get(lvl, lvl)}", col, 62,
+                       text_color=BG if lvl == 1 else "#ffffff")
+        else:
+            self.badge(x0 + 204, y1, "WIPE", None, 62)
         self.badge(x0, y2, "SIDE", GREEN if t.lightsParking else None, 40)
         self.badge(x0 + 46, y2, "LOW", GREEN if t.lightsBeamLow else None, 40)
-        self.badge(x0 + 92, y2, "HIGH", BLUE if t.lightsBeamHigh else None, 40)
+        # solid blue = lamps lit; blue outline "AUTO" = switch on but dipped by automatic high beams
+        if t.lightsBeamHigh:
+            self.badge(x0 + 92, y2, "HIGH", BLUE, 40)
+        elif self.hb_switch:
+            self.badge(x0 + 92, y2, "AUTO", BLUE, 40, outline_only=True)
+        else:
+            self.badge(x0 + 92, y2, "HIGH", None, 40)
         self.badge(x0 + 138, y2, "BCN", AMBER if t.lightsBeacon else None, 40)
         self.badge(x0 + 184, y2, "HAZ", AMBER if t.lightsHazard else None, 40)
         if steps:
